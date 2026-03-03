@@ -28,6 +28,8 @@ const PersonaliseForm = () => {
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
 
+  const childName = name.trim();
+
   const toggleEmotion = (emotion: string) => {
     setSelectedEmotions((prev) =>
       prev.includes(emotion) ? prev.filter((item) => item !== emotion) : [...prev, emotion]
@@ -37,7 +39,7 @@ const PersonaliseForm = () => {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!name.trim()) {
+    if (!childName) {
       showToast("Please enter your child's name \u{1F49B}");
       return;
     }
@@ -52,7 +54,6 @@ const PersonaliseForm = () => {
       return;
     }
 
-    const childName = name.trim();
     const primaryEmotion = selectedEmotions[0] ?? '';
 
     setLoading(true);
@@ -66,7 +67,6 @@ const PersonaliseForm = () => {
           age,
           favouriteThing,
           emotion: primaryEmotion,
-          emotions: selectedEmotions,
           notes,
           friend: friendOrPet
         })
@@ -92,6 +92,98 @@ const PersonaliseForm = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveAsPDF = () => {
+    if (!story) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { jsPDF } = require('jspdf');
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const maxWidth = pageWidth - margin * 2;
+
+    doc.setFillColor(254, 246, 255);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
+
+    doc.setFillColor(201, 184, 245);
+    doc.rect(0, 0, pageWidth, 18, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('EmotiIQ', margin, 12);
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Stories that teach hearts to feel', pageWidth - margin, 12, { align: 'right' });
+
+    const lines = story.split('\n').filter((line) => line.trim() !== '');
+    const title = lines[0];
+    const body = lines
+      .slice(1)
+      .join('\n')
+      .replace(/\[PAUSE\]/g, ' ');
+
+    doc.setTextColor(42, 26, 62);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    const titleLines = doc.splitTextToSize(title, maxWidth);
+    doc.text(titleLines, pageWidth / 2, 36, { align: 'center' });
+
+    doc.setDrawColor(201, 184, 245);
+    doc.setLineWidth(0.5);
+    doc.line(margin, 46, pageWidth - margin, 46);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(155, 111, 212);
+    doc.text(`A personalised story for ${childName || 'your child'}`, pageWidth / 2, 53, { align: 'center' });
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(42, 26, 62);
+
+    const bodyLines = doc.splitTextToSize(body, maxWidth);
+    let y = 63;
+
+    bodyLines.forEach((line: string) => {
+      if (y > pageHeight - 25) {
+        doc.addPage();
+
+        doc.setFillColor(254, 246, 255);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+
+        doc.setFillColor(201, 184, 245);
+        doc.rect(0, 0, pageWidth, 18, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text('EmotiIQ', margin, 12);
+
+        y = 28;
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(42, 26, 62);
+      }
+      doc.text(line, margin, y);
+      y += 6.5;
+    });
+
+    doc.setFontSize(8);
+    doc.setTextColor(155, 111, 212);
+    doc.setFont('helvetica', 'italic');
+    doc.text('Made with ♡ by EmotiIQ — emotiq.co', pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+    const fileName = `${childName || 'child'}-story-emotiq.pdf`;
+    doc.save(fileName);
   };
 
   return (
@@ -327,6 +419,7 @@ const PersonaliseForm = () => {
                 color: 'white',
                 boxShadow: '0 4px 18px rgba(155,111,212,0.35)'
               }}
+              onClick={saveAsPDF}
             >
               💜 Save as PDF
             </button>
