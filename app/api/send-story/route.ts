@@ -61,14 +61,18 @@ export async function POST(req: NextRequest) {
       </div>
     `;
 
-    const result = await resend.emails.send({
+    const { data: emailData, error: resendError } = await resend.emails.send({
       from: 'EmotiIQ Stories <stories@emotiq.co>',
       to: email,
       subject: 'Your EmotiIQ Story is Ready',
       html
     });
 
-    return NextResponse.json({ ok: true, id: result.id });
+    if (resendError) {
+      throw resendError;
+    }
+
+    return NextResponse.json({ ok: true, id: emailData?.id ?? null });
   } catch (error) {
     console.error('Send story email error:', error);
     return NextResponse.json({ error: 'Failed to send story email' }, { status: 500 });
