@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResendClient() {
+  if (!resendClient) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY is not set');
+    }
+    resendClient = new Resend(apiKey);
+  }
+  return resendClient;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -61,6 +72,8 @@ export async function POST(req: NextRequest) {
       </div>
     `;
 
+    const resend = getResendClient();
+
     const { data: emailData, error: resendError } = await resend.emails.send({
       from: 'EmotiIQ Stories <stories@emotiq.co>',
       to: email,
@@ -73,8 +86,16 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, id: emailData?.id ?? null });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Send story email error:', error);
+
+    if (error instanceof Error && /RESEND_API_KEY/.test(error.message)) {
+      return NextResponse.json(
+        { error: 'Email service is not configured. Please try again later.' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ error: 'Failed to send story email' }, { status: 500 });
   }
 }
