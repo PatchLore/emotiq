@@ -1,74 +1,65 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { motion } from 'framer-motion';
 import { useToast } from '@/context/ToastContext';
 
-const emotionOptions = [
-  '\u{1F630} Anxiety',
-  '\u{1F624} Anger',
-  '\u{1F622} Sadness',
-  '\u{1F628} Fear',
-  '\u{1F612} Jealousy',
-  '\u{1F614} Loneliness',
-  '\u{1F917} Empathy',
-  '\u{1F4AA} Confidence',
-  '\u{1F31F} Gratitude',
-  '\u{1F91D} Friendship'
-];
+const emotionOptions = ['happy', 'sad', 'nervous', 'angry', 'excited', 'jealous', 'scared'];
 
-const PersonaliseForm = () => {
-  const [name, setName] = useState('');
+const EmotionStoryForm = () => {
+  const [childName, setChildName] = useState('');
   const [age, setAge] = useState('');
-  const [favouriteThing, setFavouriteThing] = useState('');
-  const [friendOrPet, setFriendOrPet] = useState('');
-  const [notes, setNotes] = useState('');
-  const [selectedEmotions, setSelectedEmotions] = useState<string[]>([]);
-  const [story, setStory] = useState<string | null>(null);
+  const [emotion, setEmotion] = useState('');
+  const [situation, setSituation] = useState('');
+  const [goal, setGoal] = useState('');
   const [loading, setLoading] = useState(false);
+  const [title, setTitle] = useState<string | null>(null);
+  const [story, setStory] = useState<string | null>(null);
+
   const { showToast } = useToast();
-
-  const childName = name.trim();
-
-  const toggleEmotion = (emotion: string) => {
-    setSelectedEmotions((prev) =>
-      prev.includes(emotion) ? prev.filter((item) => item !== emotion) : [...prev, emotion]
-    );
-  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!childName) {
-      showToast("Please enter your child's name \u{1F49B}");
+    const trimmedName = childName.trim();
+    const numericAge = Number(age);
+
+    if (!trimmedName) {
+      showToast("Please enter your child's name 💛");
       return;
     }
 
-    if (!age) {
-      showToast('Please select an age range \u{1F4D6}');
+    if (!age || Number.isNaN(numericAge) || numericAge <= 0) {
+      showToast('Please enter a valid age 📏');
       return;
     }
 
-    if (!selectedEmotions.length) {
-      showToast('Pick at least one emotion \u2728');
+    if (!emotion) {
+      showToast('Please choose how your child felt ✨');
       return;
     }
 
-    const primaryEmotion = selectedEmotions[0] ?? '';
+    if (!situation.trim()) {
+      showToast('Tell us about the situation 📝');
+      return;
+    }
+
+    if (!goal.trim()) {
+      showToast('Share your learning goal 🌱');
+      return;
+    }
 
     setLoading(true);
 
     try {
-      const response = await fetch('/api/generate-story', {
+      const response = await fetch('/api/generate-emotion-story', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          childName,
-          age,
-          favouriteThing,
-          emotion: primaryEmotion,
-          notes,
-          friend: friendOrPet
+          emotion,
+          situation,
+          goal,
+          childName: trimmedName,
+          age: numericAge
         })
       });
 
@@ -76,17 +67,14 @@ const PersonaliseForm = () => {
         throw new Error('Request failed');
       }
 
-      const data: { story?: string } = await response.json();
+      const data: { title?: string; story?: string } = await response.json();
 
-      if (!data.story) {
-        throw new Error('No story returned');
+      if (!data.title || !data.story) {
+        throw new Error('Incomplete story returned');
       }
 
+      setTitle(data.title);
       setStory(data.story);
-
-      window.setTimeout(() => {
-        document.getElementById('story-result')?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
     } catch (error) {
       showToast('Something went wrong, please try again');
     } finally {
@@ -126,16 +114,13 @@ const PersonaliseForm = () => {
     doc.text('Stories that teach hearts to feel', pageWidth - margin, 12, { align: 'right' });
 
     const lines = story.split('\n').filter((line) => line.trim() !== '');
-    const title = lines[0];
-    const body = lines
-      .slice(1)
-      .join('\n')
-      .replace(/\[PAUSE\]/g, ' ');
+    const pdfTitle = title || lines[0] || 'Your Emotion Story';
+    const body = (title ? lines : lines.slice(1)).join('\n');
 
     doc.setTextColor(42, 26, 62);
     doc.setFontSize(22);
     doc.setFont('helvetica', 'bold');
-    const titleLines = doc.splitTextToSize(title, maxWidth);
+    const titleLines = doc.splitTextToSize(pdfTitle, maxWidth);
     doc.text(titleLines, pageWidth / 2, 36, { align: 'center' });
 
     doc.setDrawColor(201, 184, 245);
@@ -145,7 +130,8 @@ const PersonaliseForm = () => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(155, 111, 212);
-    doc.text(`A personalised story for ${childName || 'your child'}`, pageWidth / 2, 53, { align: 'center' });
+    const nameForSubtitle = childName.trim() || 'your child';
+    doc.text(`A personalised story for ${nameForSubtitle}`, pageWidth / 2, 53, { align: 'center' });
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
@@ -182,14 +168,29 @@ const PersonaliseForm = () => {
     doc.setFont('helvetica', 'italic');
     doc.text('Made with ♡ by EmotiIQ — emotiq.co', pageWidth / 2, pageHeight - 10, { align: 'center' });
 
-    const fileName = `${childName || 'child'}-story-emotiq.pdf`;
+    const fileName = `${(childName.trim() || 'child').replace(/\\s+/g, '-')}-emotion-story-emotiq.pdf`;
     doc.save(fileName);
+  };
+
+  const handleCopy = () => {
+    if (!story) return;
+
+    navigator.clipboard
+      .writeText(`${title ? `${title}\n\n` : ''}${story}`)
+      .then(() => showToast('Story copied! 📋'))
+      .catch(() => showToast('Unable to copy, please try again'));
+  };
+
+  const handleCreateAnother = () => {
+    setTitle(null);
+    setStory(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleReadAloud = () => {
     if (!story) return;
 
-    const text = story.replace(/\[PAUSE\]/g, ' ');
+    const text = `${title ? `${title}\n\n` : ''}${story}`;
 
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       showToast('Read aloud is not supported in this browser');
@@ -202,103 +203,79 @@ const PersonaliseForm = () => {
   };
 
   return (
-    <section className="personalise-section section-layer" id="personalise">
-      <div className="container">
-        <motion.div
-          className="form-wrapper glass"
-          initial={{ opacity: 0, y: 28 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-50px' }}
-          transition={{ duration: 0.7 }}
-        >
-          <div className="section-eyebrow">Personalised Stories</div>
-          <div className="section-title">Create <em>their</em> story</div>
-          <p className="section-sub">
-            Every detail you share helps us craft a story that feels like it was written just for them — because it
-            was.
-          </p>
-
-          <form onSubmit={handleSubmit}>
-            <div className="form-grid">
-              <div className="field-group">
-                <label htmlFor="childName">Child&apos;s Name</label>
-                <input
-                  id="childName"
-                  type="text"
-                  placeholder="e.g. Sophia"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </div>
-
-              <div className="field-group">
-                <label htmlFor="childAge">Age</label>
-                <select id="childAge" value={age} onChange={(event) => setAge(event.target.value)}>
-                  <option value="">Select age range</option>
-                  <option>3–5 years</option>
-                  <option>6–8 years</option>
-                  <option>9–12 years</option>
-                </select>
-              </div>
-
-              <div className="field-group">
-                <label htmlFor="favouriteThing">Favourite Thing</label>
-                <input
-                  id="favouriteThing"
-                  type="text"
-                  placeholder="e.g. dragons, ballet, football"
-                  value={favouriteThing}
-                  onChange={(event) => setFavouriteThing(event.target.value)}
-                />
-              </div>
-
-              <div className="field-group">
-                <label htmlFor="friendOrPet">Best Friend or Pet (optional)</label>
-                <input
-                  id="friendOrPet"
-                  type="text"
-                  placeholder="e.g. Max the dog"
-                  value={friendOrPet}
-                  onChange={(event) => setFriendOrPet(event.target.value)}
-                />
-              </div>
-
-              <div className="field-group full">
-                <label>Which emotion would you like to explore?</label>
-                <div className="emotion-picker">
-                  {emotionOptions.map((emotion) => {
-                    const active = selectedEmotions.includes(emotion);
-
-                    return (
-                      <button
-                        key={emotion}
-                        type="button"
-                        className={`epick${active ? ' active' : ''}`}
-                        onClick={() => toggleEmotion(emotion)}
-                      >
-                        {emotion}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="field-group full">
-                <label htmlFor="extraNotes">Anything else we should know?</label>
-                <textarea
-                  id="extraNotes"
-                  placeholder="e.g. She's just started a new school and is nervous about making friends…"
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                />
-              </div>
+    <>
+      <div className="form-wrapper glass">
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            <div className="field-group">
+              <label htmlFor="emotionChildName">Child&apos;s Name</label>
+              <input
+                id="emotionChildName"
+                type="text"
+                placeholder="e.g. Noah"
+                value={childName}
+                onChange={(event) => setChildName(event.target.value)}
+              />
             </div>
 
-            <div className="form-submit">
-              <button type="submit" className="btn-submit">{`\u2726 Create My Personalised Story`}</button>
+            <div className="field-group">
+              <label htmlFor="emotionAge">Age</label>
+              <input
+                id="emotionAge"
+                type="number"
+                min={1}
+                max={16}
+                placeholder="e.g. 7"
+                value={age}
+                onChange={(event) => setAge(event.target.value)}
+              />
             </div>
-          </form>
-        </motion.div>
+
+            <div className="field-group">
+              <label htmlFor="emotionFelt">Child felt</label>
+              <select
+                id="emotionFelt"
+                value={emotion}
+                onChange={(event) => setEmotion(event.target.value)}
+              >
+                <option value="">Select emotion</option>
+                {emotionOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field-group full">
+              <label htmlFor="emotionSituation">What happened?</label>
+              <input
+                id="emotionSituation"
+                type="text"
+                placeholder="e.g. Big argument with a friend at school"
+                value={situation}
+                onChange={(event) => setSituation(event.target.value)}
+              />
+            </div>
+
+            <div className="field-group full">
+              <label htmlFor="emotionGoal">What would you like them to learn?</label>
+              <input
+                id="emotionGoal"
+                type="text"
+                placeholder="e.g. build confidence for football match"
+                value={goal}
+                onChange={(event) => setGoal(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="form-submit">
+            <button type="submit" className="btn-submit" disabled={loading}>
+              {loading ? 'Crafting story…' : 'Generate Story'}
+            </button>
+          </div>
+        </form>
       </div>
 
       {loading && (
@@ -321,15 +298,14 @@ const PersonaliseForm = () => {
               marginBottom: 8
             }}
           >
-            Crafting {name || "your child's"} story…
+            Crafting {childName.trim() || "your child's"} story…
           </p>
           <p style={{ color: 'rgba(42,26,62,0.6)', fontSize: '0.9rem' }}>This takes about 15 seconds</p>
         </div>
       )}
 
-      {story && !loading && (
+      {story && title && !loading && (
         <div
-          id="story-result"
           className="glass"
           style={{
             maxWidth: 780,
@@ -348,7 +324,7 @@ const PersonaliseForm = () => {
                 fontWeight: 500
               }}
             >
-              ✦ Your Personalised Story
+              ✦ Emotion Story
             </span>
             <h2
               style={{
@@ -360,7 +336,7 @@ const PersonaliseForm = () => {
                 lineHeight: 1.2
               }}
             >
-              {story.split('\n')[0]}
+              {title}
             </h2>
           </div>
 
@@ -373,22 +349,13 @@ const PersonaliseForm = () => {
               whiteSpace: 'pre-wrap'
             }}
           >
-            {story
-              .split('\n')
-              .slice(1)
-              .join('\n')
-              .replace(/\[PAUSE\]/g, ' ')}
+            {story}
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 36, flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={() =>
-                navigator.clipboard
-                  .writeText(story)
-                  .then(() => showToast('Story copied! 📋'))
-                  .catch(() => showToast('Unable to copy, please try again'))
-              }
+              onClick={handleCopy}
               style={{
                 padding: '12px 24px',
                 borderRadius: 50,
@@ -400,14 +367,11 @@ const PersonaliseForm = () => {
                 color: '#7a4fc9'
               }}
             >
-              📋 Copy Story
+              📋 Copy
             </button>
             <button
               type="button"
-              onClick={() => {
-                setStory(null);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
+              onClick={handleCreateAnother}
               style={{
                 padding: '12px 24px',
                 borderRadius: 50,
@@ -423,6 +387,7 @@ const PersonaliseForm = () => {
             </button>
             <button
               type="button"
+              onClick={saveAsPDF}
               style={{
                 padding: '12px 24px',
                 borderRadius: 50,
@@ -434,7 +399,6 @@ const PersonaliseForm = () => {
                 color: 'white',
                 boxShadow: '0 4px 18px rgba(155,111,212,0.35)'
               }}
-              onClick={saveAsPDF}
             >
               💜 Save as PDF
             </button>
@@ -457,10 +421,8 @@ const PersonaliseForm = () => {
           </div>
         </div>
       )}
-    </section>
+    </>
   );
 };
 
-export default PersonaliseForm;
-
-
+export default EmotionStoryForm;
